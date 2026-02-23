@@ -67,10 +67,9 @@ def show_login():
                     st.error("❌ Invalid credentials")
         
         st.markdown("""
-        <div style="text-align:center; margin-top:1.5rem; padding:1rem; background:rgba(212,168,75,0.1); border-radius:12px;">
-            <p style="color:#94a3b8; font-size:0.85rem; margin:0;">
-                <strong style="color:#d4a84b;">Demo Access:</strong><br>
-                admin_produksi / admin
+        <div style="text-align:center; margin-top:1.5rem; padding:1rem; background:rgba(212,168,75,0.05); border-radius:12px;">
+            <p style="color:#94a3b8; font-size:0.8rem; margin:0;">
+                Hubungi administrator untuk mendapatkan akses.
             </p>
         </div>
         """, unsafe_allow_html=True)

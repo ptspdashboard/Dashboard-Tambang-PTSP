@@ -67,19 +67,51 @@ def hash_password(password):
 def verify_password(password, hashed):
     return hash_password(password) == hashed
 
-USERS = {
-    "admin_produksi": {
-        "name": "Admin Produksi",
-        "role": "admin",
-        # Hashed 'admin' (Temporary Reset)
-        "password_hash": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
-    },
-    "guest": {
-        "name": "Tamu",
-        "role": "viewer",
-        "password_hash": hash_password("guest")
+def _load_users():
+    """
+    Load users from Streamlit Secrets (Cloud) or use hardcoded defaults (Local Dev).
+    
+    In Streamlit Secrets, define users like this:
+    [users.admin_produksi]
+    name = "Admin Produksi"
+    role = "admin"
+    password_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+    
+    [users.guest]
+    name = "Tamu"
+    role = "viewer"
+    password_hash = "..."
+    """
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and "users" in st.secrets:
+            users = {}
+            for username, user_data in st.secrets["users"].items():
+                users[username] = {
+                    "name": user_data.get("name", username),
+                    "role": user_data.get("role", "viewer"),
+                    "password_hash": user_data.get("password_hash", ""),
+                }
+            if users:
+                return users
+    except Exception:
+        pass
+
+    # Fallback for local development only
+    return {
+        "admin_produksi": {
+            "name": "Admin Produksi",
+            "role": "admin",
+            "password_hash": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+        },
+        "guest": {
+            "name": "Tamu",
+            "role": "viewer",
+            "password_hash": hash_password("guest")
+        }
     }
-}
+
+USERS = _load_users()
 
 # ============================================================
 # 3. VISUAL STYLING (COLORS)
