@@ -38,6 +38,10 @@ def inject_css():
 
 /* Hide default streamlit elements */
 #MainMenu, footer {visibility: hidden;}
+header[data-testid="stHeader"], [data-testid="stHeader"], .stAppToolbar, [data-testid="stToolbar"], .stDecoration {
+    visibility: hidden !important;
+    display: none !important;
+}
 .block-container {padding: 1rem 2rem 2rem 2rem !important; max-width: 100% !important;}
 
 /* ===== SIDEBAR ===== */
