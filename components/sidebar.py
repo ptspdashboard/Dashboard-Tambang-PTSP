@@ -68,7 +68,7 @@ def render_sidebar():
                 keys_to_clear = [
                     'df_prod', 'df_gangguan', 'df_shipping', 'df_stockpile', 
                     'df_ritase', 'df_daily_plan', 'df_target',
-                    'last_sync_time', 'data_loaded'
+                    'last_sync_time', 'data_loaded', '_sync_time_checked'
                 ]
                 for key in keys_to_clear:
                     if key in st.session_state:
@@ -127,8 +127,8 @@ def render_sidebar():
                 pass
             return time_val
         
-        # If not in session, try to fetch from DB (Persistent)
-        if not last_sync:
+        # If not in session, try to fetch from DB ONCE per session (not every render)
+        if not last_sync and not st.session_state.get('_sync_time_checked', False):
             try:
                 from utils.db_manager import get_db_engine
                 from sqlalchemy import text
@@ -142,6 +142,7 @@ def render_sidebar():
                             st.session_state['last_sync_time'] = last_sync
             except:
                 pass
+            st.session_state['_sync_time_checked'] = True
 
         if last_sync:
             st.markdown(f'<p style="color:#64748b; font-size:0.75rem; text-align:center; margin-top:0.5rem;">Last Sync: {last_sync}</p>', unsafe_allow_html=True)

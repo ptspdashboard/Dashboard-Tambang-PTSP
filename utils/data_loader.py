@@ -341,11 +341,6 @@ def load_produksi(start_date=None):
         debug_log.append(f"DB Load Error: {str(e)}")
         return pd.DataFrame() # Force Stop
         
-    except Exception as e:
-        print(f"[DEBUG] ❌ DB LOAD FAILED: {str(e)}")
-        debug_log.append(f"DB Load Error: {str(e)}")
-        return pd.DataFrame() # Force Stop
-        
     # Generic loader
     def load_content(source):
 
