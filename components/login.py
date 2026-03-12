@@ -65,5 +65,12 @@ def show_login():
                     st.rerun()
                 else:
                     st.error("❌ Invalid credentials")
+                    
+    # --- GHOSTING FIX: Login Trailing Padding ---
+    # When a user logs out from a long dashboard page, Streamlit might retain
+    # the trailing elements of the dashboard beneath the login widget.
+    # This padding ensures the DOM is fully overwritten with empty slots.
+    for _ in range(25):
+        st.empty()
         
 
