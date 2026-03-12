@@ -97,36 +97,11 @@ def verify_password(password, hashed):
 
 def _load_users():
     """
-    Load users from Streamlit Secrets (Cloud) or use hardcoded defaults (Local Dev).
-    
-    In Streamlit Secrets, define users like this:
-    [users.admin_produksi]
-    name = "Admin Produksi"
-    role = "admin"
-    password_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
-    
-    [users.guest]
-    name = "Tamu"
-    role = "viewer"
-    password_hash = "..."
+    Load users from Streamlit Secrets (Cloud) and merge with hardcoded defaults.
+    Secrets will override defaults if the same username exists.
     """
-    try:
-        import streamlit as st
-        if hasattr(st, "secrets") and "users" in st.secrets:
-            users = {}
-            for username, user_data in st.secrets["users"].items():
-                users[username] = {
-                    "name": user_data.get("name", username),
-                    "role": user_data.get("role", "viewer"),
-                    "password_hash": user_data.get("password_hash", ""),
-                }
-            if users:
-                return users
-    except Exception:
-        pass
-
-    # Fallback for local development only
-    return {
+    # Base defaults
+    default_users = {
         "admin_produksi": {
             "name": "Admin Produksi",
             "role": "admin",
@@ -143,6 +118,20 @@ def _load_users():
             "password_hash": hash_password("guest")
         }
     }
+
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and "users" in st.secrets:
+            for username, user_data in st.secrets["users"].items():
+                default_users[username] = {
+                    "name": user_data.get("name", username),
+                    "role": user_data.get("role", "viewer"),
+                    "password_hash": user_data.get("password_hash", ""),
+                }
+    except Exception:
+        pass
+
+    return default_users
 
 USERS = _load_users()
 
