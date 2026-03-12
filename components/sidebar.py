@@ -162,11 +162,11 @@ def render_sidebar():
         else:
             _render_production_sidebar()
         
-        st.markdown("---")
-        
+        st.markdown("<br><br>", unsafe_allow_html=True)
         # Logout
         if st.button("🚪 Sign Out", use_container_width=True):
             logout()
+            st.rerun()
             st.rerun()
         
         # Footer
