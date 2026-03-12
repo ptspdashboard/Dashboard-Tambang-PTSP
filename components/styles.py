@@ -38,9 +38,13 @@ def inject_css():
 
 /* Hide default streamlit elements */
 #MainMenu, footer {visibility: hidden;}
-header[data-testid="stHeader"], [data-testid="stHeader"], .stAppToolbar, [data-testid="stToolbar"], .stDecoration {
+.stDecoration {
     visibility: hidden !important;
     display: none !important;
+}
+/* Re-enable header for mobile hamburger menu, but make it transparent */
+header[data-testid="stHeader"] {
+    background-color: transparent !important;
 }
 .block-container {padding: 1rem 2rem 2rem 2rem !important; max-width: 100% !important;}
 
