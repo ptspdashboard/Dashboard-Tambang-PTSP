@@ -1189,3 +1189,8 @@ def show_daily_plan():
         Mining Dashboard v4.0 &copy; 2025 Semen Padang
     </div>
     """, unsafe_allow_html=True)
+    
+    # --- GHOSTING FIX: Trailing Padding ---
+    # Append empty slots to overwrite any trailing DOM remnants from other longer modules
+    for _ in range(25):
+        st.empty()

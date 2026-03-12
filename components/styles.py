@@ -476,5 +476,6 @@ div[data-testid="stDataFrame"], div[data-testid="stPlotlyChart"] {
         padding-bottom: 0.5rem;
     }
 }
+
 </style>
 """, unsafe_allow_html=True)

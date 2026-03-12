@@ -2092,3 +2092,82 @@ def get_production_kpi_summary(start_date=None, end_date=None):
     except Exception as e:
         print(f"KPI Query Error: {e}")
     return pd.Series({'total_ton': 0, 'total_rit': 0, 'last_date': None})
+
+
+# ============================================================
+# SOLAR / BBM DATA LOADERS (Single Source: solar_refueling)
+# ============================================================
+
+@st.cache_data(ttl=CACHE_TTL, persist="disk")
+def load_solar_refueling():
+    """
+    Load PENGISIAN (refueling detail) — SINGLE SOURCE OF TRUTH for all solar data.
+    All other solar metrics (daily totals, L/Jam, shift breakdown) are derived from this.
+    
+    Returns DataFrame: [Perusahaan, Jenis_Alat, Tipe_Unit, Tanggal, Shift, 
+                        HM_Value, Liter, L_per_Jam, Jam_Operasi, Bulan, Tahun]
+    """
+    try:
+        engine = get_db_engine()
+        if engine:
+            query = "SELECT * FROM solar_refueling WHERE tahun >= 2026"
+            df_db = pd.read_sql(query, engine)
+            if not df_db.empty:
+                if 'tanggal' in df_db.columns:
+                    df_db['tanggal'] = pd.to_datetime(df_db['tanggal'])
+                
+                rename_map = {
+                    'perusahaan': 'Perusahaan',
+                    'jenis_alat': 'Jenis_Alat',
+                    'tipe_unit': 'Tipe_Unit',
+                    'tanggal': 'Tanggal',
+                    'shift': 'Shift',
+                    'hm_value': 'HM_Value',
+                    'liter': 'Liter',
+                    'l_per_jam': 'L_per_Jam',
+                    'jam_operasi': 'Jam_Operasi',
+                    'bulan': 'Bulan',
+                    'tahun': 'Tahun',
+                    'metric_type': 'Metric_Type'
+                }
+                df_db = df_db.rename(columns=rename_map)
+                print(f"[Solar Loader] Loaded {len(df_db)} refueling records from DB")
+                return df_db
+    except Exception as e:
+        print(f"Solar Refueling DB Load Error: {e}")
+    
+    return pd.DataFrame()
+
+
+# Backward-compatible aliases (derive from refueling data)
+def load_solar_all():
+    """
+    Backward-compatible: returns daily liter totals derived from solar_refueling.
+    Returns DataFrame: [Perusahaan, Jenis_Alat, Tipe_Unit, Tanggal, Liter, Bulan, Tahun]
+    """
+    df = load_solar_refueling()
+    if df.empty:
+        return df
+    # Aggregate to daily totals per unit
+    group_cols = ['Perusahaan', 'Jenis_Alat', 'Tipe_Unit', 'Tanggal', 'Bulan', 'Tahun']
+    available_cols = [c for c in group_cols if c in df.columns]
+    result = df.groupby(available_cols, as_index=False)['Liter'].sum()
+    return result
+
+
+def load_fuel_efficiency():
+    """
+    Backward-compatible: returns L/Jam data derived from solar_refueling.
+    Returns DataFrame: [Perusahaan, Jenis_Alat, Tipe_Unit, Tanggal, L_per_Jam, Bulan, Tahun]
+    """
+    df = load_solar_refueling()
+    if df.empty:
+        return df
+    # Filter to records with L/Jam data, deduplicate to daily per unit
+    df_eff = df[df['L_per_Jam'].notna() & (df['L_per_Jam'] > 0)].copy()
+    if df_eff.empty:
+        return pd.DataFrame()
+    group_cols = ['Perusahaan', 'Jenis_Alat', 'Tipe_Unit', 'Tanggal', 'Bulan', 'Tahun']
+    available_cols = [c for c in group_cols if c in df_eff.columns]
+    result = df_eff.groupby(available_cols, as_index=False)['L_per_Jam'].mean()
+    return result

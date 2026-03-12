@@ -10,7 +10,9 @@ from utils.parsers import (
     parse_stockpile_hopper, 
     parse_production_data, 
     parse_downtime_data, 
-    parse_target_data
+    parse_target_data,
+    parse_solar_refueling,
+    extract_day1_hm
 )
 from utils.models import (
     ShippingLog, 
@@ -18,7 +20,8 @@ from utils.models import (
     StockpileLog, 
     ProductionLog, 
     DowntimeLog, 
-    TargetLog
+    TargetLog,
+    SolarRefueling
 )
 from utils.db_manager import get_db_engine
 from sqlalchemy.orm import sessionmaker
@@ -309,7 +312,115 @@ def sync_all_data():
     except Exception as e:
         status_report['Downtime'] = f"❌ Error: {str(e)[:50]}"
 
-    # ... (previous code) ...
+    # 5. SOLAR / BBM — Single table: SolarRefueling (from PENGISIAN sheet)
+    try:
+        from config.settings import SOLAR_LINKS
+        import calendar
+        
+        all_refueling_records = []
+        # Store downloaded sources for cross-month bridging
+        # { month_int: source_bytesio }
+        downloaded_sources = {}
+        sorted_periods = sorted(SOLAR_LINKS.keys())  # e.g. ['2026-01', '2026-02', '2026-03']
+        
+        for month_period in sorted_periods:
+            link = SOLAR_LINKS[month_period]
+            if not link:
+                continue
+            try:
+                year_str, month_key = month_period.split('-')
+                year = int(year_str)
+                month_int = int(month_key)
+                
+                source_solar = download_from_onedrive(link)
+                if not source_solar:
+                    status_report[f'Solar {month_period}'] = "❌ Download Failed"
+                    continue
+                
+                # Store for bridging
+                downloaded_sources[month_int] = source_solar
+                
+                # Parse PENGISIAN only (single source of truth)
+                df_ref = parse_solar_refueling(source_solar, month_key, year)
+                if not df_ref.empty:
+                    for _, row in df_ref.iterrows():
+                        if pd.notna(row.get('Tanggal')) and float(row.get('Liter', 0)) != 0:
+                            all_refueling_records.append(SolarRefueling(
+                                perusahaan=str(row['Perusahaan']),
+                                jenis_alat=str(row['Jenis_Alat']),
+                                tipe_unit=str(row['Tipe_Unit']),
+                                tanggal=row['Tanggal'],
+                                bulan=str(row['Bulan']),
+                                tahun=int(row['Tahun']),
+                                shift=str(row.get('Shift', '')),
+                                hm_value=float(row['HM_Value']) if pd.notna(row.get('HM_Value')) else None,
+                                liter=float(row['Liter']),
+                                l_per_jam=float(row['L_per_Jam']) if pd.notna(row.get('L_per_Jam')) else None,
+                                jam_operasi=float(row['Jam_Operasi']) if pd.notna(row.get('Jam_Operasi')) else None,
+                                metric_type=str(row.get('Metric_Type', 'L/Jam'))
+                            ))
+                
+                ref_count = len(df_ref) if not df_ref.empty else 0
+                status_report[f'Solar {month_period}'] = f"✅ {ref_count} records from PENGISIAN"
+            except Exception as e:
+                status_report[f'Solar {month_period}'] = f"❌ Error: {str(e)[:50]}"
+        
+        # ========================================
+        # CROSS-MONTH BRIDGE: Fill Jam_Operasi and L/Jam for last day of each month
+        # ========================================
+        bridge_count = 0
+        month_ints = sorted(downloaded_sources.keys())
+        
+        for i, m in enumerate(month_ints):
+            if i + 1 >= len(month_ints):
+                break  # No next month available
+            
+            next_m = month_ints[i + 1]
+            year_for_m = 2026  # Hardcoded for now
+            last_day = calendar.monthrange(year_for_m, m)[1]
+            last_date = datetime(year_for_m, m, last_day).date()
+            
+            # Extract Day 1 HM from next month
+            next_source = downloaded_sources[next_m]
+            if hasattr(next_source, 'seek'):
+                next_source.seek(0)
+            day1_hm = extract_day1_hm(next_source)
+            
+            if not day1_hm:
+                continue
+            
+            # Find records on last_date that are missing jam_operasi
+            for rec in all_refueling_records:
+                if rec.tanggal != last_date:
+                    continue
+                if rec.jam_operasi is not None and rec.jam_operasi > 0:
+                    continue  # Already has data
+                if rec.hm_value is None:
+                    continue  # No HM to bridge with
+                
+                unit = rec.tipe_unit
+                next_hm = day1_hm.get(unit)
+                if next_hm is None:
+                    continue
+                
+                # Calculate Jam Operasi = HM(Day1 next month) - HM(last day)
+                jam_op = next_hm - rec.hm_value
+                if jam_op > 0 and jam_op < 24:  # Sanity: max 24 hours in a day
+                    rec.jam_operasi = round(jam_op, 2)
+                    if rec.liter and rec.liter > 0:
+                        rec.l_per_jam = round(rec.liter / jam_op, 2)
+                    bridge_count += 1
+        
+        if bridge_count > 0:
+            print(f"[Bridge] Fixed {bridge_count} records at month boundaries")
+        
+        # Bulk insert refueling (single table)
+        if all_refueling_records:
+            status_report['Solar Refueling'] = safe_bulk_insert_report(
+                session, SolarRefueling, all_refueling_records, "Solar Refueling", date_column='tanggal'
+            )
+    except Exception as e:
+        status_report['Solar'] = f"❌ Error: {str(e)[:50]}"
     
     # 5. SAVE SYNC TIME TO DATABASE (PERSISTENT LOG)
     try:

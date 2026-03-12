@@ -156,3 +156,31 @@ class SystemLog(Base):
 
     def __repr__(self):
         return f"<SystemLog({self.key}={self.value})>"
+
+# ============================================================
+# 8. SOLAR REFUELING (Single source of truth for all solar data)
+# ============================================================
+# Replaces 3 old tables (solar_daily, fuel_efficiency, solar_refueling)
+# All KPIs (total liter, L/Jam, shift breakdown) derived from this table.
+class SolarRefueling(Base):
+    __tablename__ = 'solar_refueling'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    perusahaan = Column(String(100))
+    jenis_alat = Column(String(100))
+    tipe_unit = Column(String(150))
+    tanggal = Column(Date, index=True)
+    bulan = Column(String(20))
+    tahun = Column(Integer)
+    shift = Column(String(10))        # 'P' (Pagi), 'S' (Sore)
+    hm_value = Column(Float, nullable=True)
+    liter = Column(Float, default=0.0)
+    l_per_jam = Column(Float, nullable=True)     # L/Jam for heavy equipment, L/Km for LV/Scania
+    jam_operasi = Column(Float, nullable=True)   # Jam for heavy equipment, Km for LV/Scania
+    metric_type = Column(String(10), default='L/Jam')  # 'L/Jam' or 'L/Km'
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<SolarRefueling(date={self.tanggal}, unit={self.tipe_unit}, shift={self.shift})>"
+

@@ -38,6 +38,30 @@ ONEDRIVE_LINKS = {
     "stockpile": ""   # (Integrated in Monitoring)
 }
 
+# ============================================================
+# SOLAR/BBM ONEDRIVE LINKS (Per-month file registry)
+# ============================================================
+# Each month has a separate Excel file with its own OneDrive link.
+# Key format: "YYYY-MM" -> OneDrive share link
+SOLAR_LINKS = {
+    "2026-01": "https://1drv.ms/x/c/07c1e1a8c3295b87/IQB4j_r8JO_TR7FfD8yUPbGsAUpPDz8sABE5ay5_sn6c7WI",
+    "2026-02": "https://1drv.ms/x/c/07c1e1a8c3295b87/IQCVnRNVVSPZSal6jKtjYDOWATylbmYzq9Y8pNbtv5F2-e4",
+    "2026-03": "https://1drv.ms/x/c/07c1e1a8c3295b87/IQChrI3CKPLnTq8lnp1GA21kAZbKRu9sUeJrq-4QgeJ6hEU",
+}
+
+# Month key to sheet name mapping
+SOLAR_MONTH_SHEETS = {
+    "01": "JAN", "02": "FEB", "03": "MAR", "04": "APR",
+    "05": "MEI", "06": "JUN", "07": "JUL", "08": "AGU",
+    "09": "SEP", "10": "OKT", "11": "NOV", "12": "DES",
+}
+
+SOLAR_MONTH_NAMES = {
+    "01": "Januari", "02": "Februari", "03": "Maret", "04": "April",
+    "05": "Mei", "06": "Juni", "07": "Juli", "08": "Agustus",
+    "09": "September", "10": "Oktober", "11": "November", "12": "Desember",
+}
+
 # Try to load from Streamlit Secrets if available (prioritized for Cloud)
 try:
     import streamlit as st
@@ -45,6 +69,10 @@ try:
         for key in ONEDRIVE_LINKS.keys():
             if key in st.secrets["onedrive"]:
                 ONEDRIVE_LINKS[key] = st.secrets["onedrive"][key]
+    # Load solar links from secrets
+    if hasattr(st, "secrets") and "solar_links" in st.secrets:
+        for key, val in st.secrets["solar_links"].items():
+            SOLAR_LINKS[key] = val
 except:
     pass
 
@@ -103,6 +131,11 @@ def _load_users():
             "name": "Admin Produksi",
             "role": "admin",
             "password_hash": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+        },
+        "admin_solar": {
+            "name": "Admin Solar/BBM",
+            "role": "admin_solar",
+            "password_hash": hash_password("solar123")
         },
         "guest": {
             "name": "Tamu",

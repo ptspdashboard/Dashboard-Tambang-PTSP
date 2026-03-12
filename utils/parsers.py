@@ -637,3 +637,599 @@ def parse_target_data(source):
         return pd.DataFrame(records)
     except: return pd.DataFrame()
 
+
+# ============================================================
+# 7. SOLAR MONTHLY PARSER (Solar Excel -> Sheet Bulan: JAN/FEB/...)
+# ============================================================
+# Structure:
+#   Row 0: Perusahaan | Jenis Alat | Tipe Unit | PEMAKAIAN SOLAR (LITER) | ...
+#   Row 1: (empty)    | (empty)    | (empty)   | TANGGAL                 | ...
+#   Row 2: (empty)    | (empty)    | (empty)   | 1 | 2 | 3 | ... | 31 | TOTAL | RATA-RATA | PERSENTASE
+#   Row 3+: Data rows (Perusahaan & Jenis Alat are merged cells -> forward-fill)
+
+def parse_solar_monthly(source, month_key, year=2026):
+    """
+    Parse solar monthly consumption sheet.
+    month_key: e.g. "01" for January
+    Returns DataFrame: [Perusahaan, Jenis_Alat, Tipe_Unit, Tanggal, Liter, Bulan, Tahun]
+    """
+    from config.settings import SOLAR_MONTH_SHEETS, SOLAR_MONTH_NAMES
+    
+    try:
+        sheet_name = SOLAR_MONTH_SHEETS.get(month_key)
+        month_name = SOLAR_MONTH_NAMES.get(month_key, "Unknown")
+        month_int = int(month_key)
+        
+        if not sheet_name:
+            return pd.DataFrame()
+        
+        try:
+            xls = pd.ExcelFile(source, engine='openpyxl')
+        except:
+            if hasattr(source, 'seek'): source.seek(0)
+            xls = pd.ExcelFile(source)
+        
+        # Find the sheet (case-insensitive, partial match)
+        target_sheet = None
+        for s in xls.sheet_names:
+            if s.upper().strip() == sheet_name.upper().strip():
+                target_sheet = s
+                break
+            # Also match full month names like "FUEL CONSUMPTION JANUARI"
+            if sheet_name.upper() in s.upper():
+                target_sheet = s
+                break
+        
+        if not target_sheet:
+            print(f"[Solar Parser] Sheet '{sheet_name}' not found. Available: {xls.sheet_names}")
+            return pd.DataFrame()
+        
+        # Read raw to find structure
+        df_raw = pd.read_excel(xls, sheet_name=target_sheet, header=None)
+        
+        if df_raw.empty:
+            return pd.DataFrame()
+        
+        # Find the day-number row (row with 1, 2, 3... as tanggal)
+        day_row_idx = None
+        for i in range(min(10, len(df_raw))):
+            row_vals = df_raw.iloc[i].values
+            # Check if this row has sequential numbers 1, 2, 3...
+            nums = []
+            for v in row_vals[3:10]:  # Skip first 3 cols (Perusahaan, Jenis, Unit)
+                try:
+                    n = int(float(v))
+                    nums.append(n)
+                except:
+                    pass
+            if len(nums) >= 3 and nums[:3] == [1, 2, 3]:
+                day_row_idx = i
+                break
+        
+        if day_row_idx is None:
+            # Fallback: assume row 2
+            day_row_idx = 2
+        
+        # Extract day columns (skip first 3 meta columns)
+        day_cols = {}
+        for col_idx in range(3, len(df_raw.columns)):
+            val = df_raw.iloc[day_row_idx, col_idx]
+            try:
+                day_num = int(float(val))
+                if 1 <= day_num <= 31:
+                    day_cols[col_idx] = day_num
+            except:
+                pass
+        
+        if not day_cols:
+            return pd.DataFrame()
+        
+        # Data starts from day_row_idx + 1
+        data_start = day_row_idx + 1
+        
+        records = []
+        current_company = None
+        current_jenis = None
+        
+        for i in range(data_start, len(df_raw)):
+            row = df_raw.iloc[i]
+            
+            # Update company if present
+            perusahaan = row.iloc[0] if len(row) > 0 else None
+            jenis_alat = row.iloc[1] if len(row) > 1 else None
+            tipe_unit = row.iloc[2] if len(row) > 2 else None
+            
+            if pd.notna(perusahaan):
+                perusahaan_str = str(perusahaan).strip()
+                # Skip total/summary rows
+                if 'total' in perusahaan_str.lower():
+                    continue
+                current_company = perusahaan_str
+            
+            if pd.notna(jenis_alat):
+                jenis_str = str(jenis_alat).strip()
+                if 'total' not in jenis_str.lower():
+                    current_jenis = jenis_str
+            
+            # Skip if no unit
+            if pd.isna(tipe_unit) or not current_company:
+                continue
+            
+            unit_str = str(tipe_unit).strip()
+            if unit_str.lower() in ['nan', '', 'none'] or 'total' in unit_str.lower():
+                continue
+            
+            # Extract daily liter values
+            for col_idx, day_num in day_cols.items():
+                try:
+                    val = row.iloc[col_idx]
+                    liter = float(val) if pd.notna(val) else 0.0
+                except:
+                    liter = 0.0
+                
+                # Construct date
+                try:
+                    tanggal = datetime(year, month_int, day_num).date()
+                except ValueError:
+                    continue  # Invalid date (e.g., Feb 30)
+                
+                records.append({
+                    'Perusahaan': current_company,
+                    'Jenis_Alat': current_jenis or 'Unknown',
+                    'Tipe_Unit': unit_str,
+                    'Tanggal': tanggal,
+                    'Liter': liter,
+                    'Bulan': month_name,
+                    'Tahun': year
+                })
+        
+        if records:
+            df = pd.DataFrame(records)
+            print(f"[Solar Parser] Parsed {len(df)} records from sheet '{target_sheet}'")
+            return df
+        
+        return pd.DataFrame()
+        
+    except Exception as e:
+        print(f"[Solar Parser] Error parsing monthly sheet: {e}")
+        return pd.DataFrame()
+
+
+# ============================================================
+# 8. FUEL CONSUMPTION PARSER (Solar Excel -> Sheet FUEL CONSUMPTION)
+# ============================================================
+# Same structure as monthly sheet but values are L/Jam instead of Liters
+
+def parse_fuel_consumption(source, month_key, year=2026):
+    """
+    Parse fuel consumption sheet.
+    Returns DataFrame: [Perusahaan, Jenis_Alat, Tipe_Unit, Tanggal, L_per_Jam, Bulan, Tahun]
+    """
+    from config.settings import SOLAR_MONTH_NAMES
+    
+    try:
+        month_name = SOLAR_MONTH_NAMES.get(month_key, "Unknown")
+        month_int = int(month_key)
+        
+        # Find the FUEL CONSUMPTION sheet
+        try:
+            xls = pd.ExcelFile(source, engine='openpyxl')
+        except:
+            if hasattr(source, 'seek'): source.seek(0)
+            xls = pd.ExcelFile(source)
+        
+        target_sheet = None
+        for s in xls.sheet_names:
+            if 'fuel consumption' in s.lower():
+                target_sheet = s
+                break
+        
+        if not target_sheet:
+            print(f"[FC Parser] FUEL CONSUMPTION sheet not found. Available: {xls.sheet_names}")
+            return pd.DataFrame()
+        
+        # Read raw
+        df_raw = pd.read_excel(xls, sheet_name=target_sheet, header=None)
+        
+        if df_raw.empty:
+            return pd.DataFrame()
+        
+        # Find day-number row
+        day_row_idx = None
+        for i in range(min(10, len(df_raw))):
+            row_vals = df_raw.iloc[i].values
+            nums = []
+            for v in row_vals[3:10]:
+                try:
+                    n = int(float(v))
+                    nums.append(n)
+                except:
+                    pass
+            if len(nums) >= 3 and nums[:3] == [1, 2, 3]:
+                day_row_idx = i
+                break
+        
+        if day_row_idx is None:
+            day_row_idx = 2
+        
+        # Extract day columns 
+        day_cols = {}
+        for col_idx in range(3, len(df_raw.columns)):
+            val = df_raw.iloc[day_row_idx, col_idx]
+            try:
+                day_num = int(float(val))
+                if 1 <= day_num <= 31:
+                    day_cols[col_idx] = day_num
+            except:
+                pass
+        
+        if not day_cols:
+            return pd.DataFrame()
+        
+        data_start = day_row_idx + 1
+        records = []
+        current_company = None
+        current_jenis = None
+        
+        for i in range(data_start, len(df_raw)):
+            row = df_raw.iloc[i]
+            
+            perusahaan = row.iloc[0] if len(row) > 0 else None
+            jenis_alat = row.iloc[1] if len(row) > 1 else None
+            tipe_unit = row.iloc[2] if len(row) > 2 else None
+            
+            if pd.notna(perusahaan):
+                perusahaan_str = str(perusahaan).strip()
+                if 'total' in perusahaan_str.lower():
+                    continue
+                current_company = perusahaan_str
+            
+            if pd.notna(jenis_alat):
+                jenis_str = str(jenis_alat).strip()
+                if 'total' not in jenis_str.lower():
+                    current_jenis = jenis_str
+            
+            if pd.isna(tipe_unit) or not current_company:
+                continue
+            
+            unit_str = str(tipe_unit).strip()
+            if unit_str.lower() in ['nan', '', 'none'] or 'total' in unit_str.lower():
+                continue
+            
+            for col_idx, day_num in day_cols.items():
+                try:
+                    val = row.iloc[col_idx]
+                    if pd.notna(val):
+                        l_per_jam = float(val)
+                        if l_per_jam > 0:  # Only store positive FC values
+                            try:
+                                tanggal = datetime(year, month_int, day_num).date()
+                            except ValueError:
+                                continue
+                            
+                            records.append({
+                                'Perusahaan': current_company,
+                                'Jenis_Alat': current_jenis or 'Unknown',
+                                'Tipe_Unit': unit_str,
+                                'Tanggal': tanggal,
+                                'L_per_Jam': l_per_jam,
+                                'Bulan': month_name,
+                                'Tahun': year
+                            })
+                except:
+                    pass
+        
+        if records:
+            df = pd.DataFrame(records)
+            print(f"[FC Parser] Parsed {len(df)} records from sheet '{target_sheet}'")
+            return df
+        
+        return pd.DataFrame()
+        
+    except Exception as e:
+        print(f"[FC Parser] Error: {e}")
+        return pd.DataFrame()
+
+
+# ============================================================
+# 9. SOLAR REFUELING PARSER (Solar Excel -> Sheet PENGISIAN)
+# ============================================================
+# Structure (very wide - 7 sub-columns per day):
+#   Row 4: (empty) | Perusahaan | Jenis Alat | Tipe Unit | Day1 | ... | ... | ... | ... | ... | ... | Day2 | ...
+#   Row 5: (empty) | (empty)    | (empty)    | (empty)   | PENGISIAN (LITER) | ... 
+#   Row 6: (empty) | (empty)    | (empty)    | (empty)   | P | HM | S | HM | L/Jam | Jam Operasi | Liter | P | HM | ...
+#   Row 7+: Data
+
+def parse_solar_refueling(source, month_key, year=2026):
+    """
+    Parse PENGISIAN (refueling detail) sheet.
+    Returns DataFrame: [Perusahaan, Jenis_Alat, Tipe_Unit, Tanggal, Shift, HM_Value, Liter, L_per_Jam, Jam_Operasi, Bulan, Tahun]
+    """
+    from config.settings import SOLAR_MONTH_NAMES
+    
+    try:
+        month_name = SOLAR_MONTH_NAMES.get(month_key, "Unknown")
+        month_int = int(month_key)
+        
+        try:
+            xls = pd.ExcelFile(source, engine='openpyxl')
+        except:
+            if hasattr(source, 'seek'): source.seek(0)
+            xls = pd.ExcelFile(source)
+        
+        if 'PENGISIAN' not in xls.sheet_names:
+            return pd.DataFrame()
+        
+        df_raw = pd.read_excel(xls, sheet_name='PENGISIAN', header=None)
+        
+        if df_raw.empty or len(df_raw) < 8:
+            return pd.DataFrame()
+        
+        # Find day-number row (Row 4 typically)
+        day_row_idx = None
+        for i in range(min(10, len(df_raw))):
+            row_vals = df_raw.iloc[i].values[4:]  # Skip first 4 cols
+            nums = []
+            for v in row_vals[:20]:
+                try:
+                    n = int(float(v))
+                    nums.append(n)
+                except:
+                    pass
+            if len(nums) >= 2 and 1 in nums and 2 in nums:
+                day_row_idx = i
+                break
+        
+        if day_row_idx is None:
+            day_row_idx = 4
+        
+        # Build day-column mapping
+        # Each day has 7 sub-columns: P, HM, S, HM, L/Jam, Jam Operasi, Liter
+        COLS_PER_DAY = 7
+        day_start_cols = {}  # day_num -> start_col_index
+        
+        for col_idx in range(4, len(df_raw.columns)):
+            val = df_raw.iloc[day_row_idx, col_idx]
+            try:
+                day_num = int(float(val))
+                if 1 <= day_num <= 31:
+                    day_start_cols[day_num] = col_idx
+            except:
+                pass
+        
+        if not day_start_cols:
+            return pd.DataFrame()
+        
+        # Data starts from row after sub-headers (row 6 = column names, row 7 = data)
+        data_start = day_row_idx + 3  # Skip day row, "PENGISIAN" row, column names row
+        
+        records = []
+        current_company = None
+        current_jenis = None
+        
+        for i in range(data_start, len(df_raw)):
+            row = df_raw.iloc[i]
+            
+            perusahaan = row.iloc[1] if len(row) > 1 else None
+            jenis_alat = row.iloc[2] if len(row) > 2 else None
+            tipe_unit = row.iloc[3] if len(row) > 3 else None
+            
+            if pd.notna(perusahaan):
+                perusahaan_str = str(perusahaan).strip()
+                if 'total' in perusahaan_str.lower():
+                    continue
+                current_company = perusahaan_str
+            
+            if pd.notna(jenis_alat):
+                jenis_str = str(jenis_alat).strip()
+                if 'total' not in jenis_str.lower():
+                    current_jenis = jenis_str
+            
+            if pd.isna(tipe_unit) or not current_company:
+                continue
+            
+            unit_str = str(tipe_unit).strip()
+            if unit_str.lower() in ['nan', '', 'none'] or 'total' in unit_str.lower():
+                continue
+            
+            # Extract data for each day
+            for day_num, start_col in day_start_cols.items():
+                try:
+                    tanggal = datetime(year, month_int, day_num).date()
+                except ValueError:
+                    continue
+                
+                # Sub-columns: P(0), HM(1), S(2), HM(3), L/Jam(4), Jam Operasi(5), Liter(6)
+                def safe_float(idx):
+                    try:
+                        v = row.iloc[idx]
+                        return float(v) if pd.notna(v) else None
+                    except:
+                        return None
+                
+                p_val = safe_float(start_col)      # P (Pagi liter)
+                hm_p = safe_float(start_col + 1)   # HM Pagi
+                s_val = safe_float(start_col + 2)   # S (Sore liter)
+                hm_s = safe_float(start_col + 3)    # HM Sore
+                l_per_jam = safe_float(start_col + 4)
+                jam_operasi = safe_float(start_col + 5)
+                total_liter = safe_float(start_col + 6)
+                
+                # GATEKEEPER: Only process this day if total_liter > 0
+                # This prevents formula artifacts from unfilled days
+                # appearing in the dashboard (matches production behavior)
+                if total_liter is None or total_liter <= 0:
+                    continue
+                
+                # Detect metric type: LV, Scania, Strada use L/Km; others use L/Jam
+                def _is_lkm_unit(name):
+                    name_upper = name.upper()
+                    lkm_keywords = ['LV ', 'LV)', 'SCANIA', 'STRADA', 'PICK UP', 'PICKUP']
+                    return any(kw in name_upper for kw in lkm_keywords)
+                
+                metric_type = 'L/Km' if _is_lkm_unit(unit_str) else 'L/Jam'
+                
+                # Record Pagi shift if data exists
+                if p_val is not None and p_val != 0:
+                    records.append({
+                        'Perusahaan': current_company,
+                        'Jenis_Alat': current_jenis or 'Unknown',
+                        'Tipe_Unit': unit_str,
+                        'Tanggal': tanggal,
+                        'Shift': 'P',
+                        'HM_Value': hm_p,
+                        'Liter': p_val,
+                        'L_per_Jam': l_per_jam,
+                        'Jam_Operasi': jam_operasi,
+                        'Bulan': month_name,
+                        'Tahun': year,
+                        'Metric_Type': metric_type
+                    })
+                
+                # Record Sore shift if data exists
+                if s_val is not None and s_val != 0:
+                    records.append({
+                        'Perusahaan': current_company,
+                        'Jenis_Alat': current_jenis or 'Unknown',
+                        'Tipe_Unit': unit_str,
+                        'Tanggal': tanggal,
+                        'Shift': 'S',
+                        'HM_Value': hm_s,
+                        'Liter': s_val,
+                        'L_per_Jam': l_per_jam,
+                        'Jam_Operasi': jam_operasi,
+                        'Bulan': month_name,
+                        'Tahun': year,
+                        'Metric_Type': metric_type
+                    })
+        
+        if records:
+            df = pd.DataFrame(records)
+            
+            # ========================================
+            # DATA NORMALIZATION
+            # ========================================
+            # 1. Filter out non-data rows (summary/flowmeter rows)
+            SKIP_COMPANIES = {
+                'SHIFT 1', 'SHIFT 2', 'SHIET 2', 'Total Pemakaian',
+                'Flow Meter MS 18', 'Flowmeter MS 20',
+            }
+            df = df[~df['Perusahaan'].isin(SKIP_COMPANIES)]
+            
+            # 2. Normalize Perusahaan names
+            COMPANY_MAP = {
+                'PT. KEPSINDO': 'PT KEPSINDO',
+                'PT. EKG': 'PT EKG',
+                'PT. NJA': 'PT NJA',
+                'PT. LTU': 'PT LTU',
+                'PT. UTSG': 'PT UTSG',
+                'PT. DAHANA': 'PT DAHANA',
+                'PT. WBS': 'PT WBS',
+            }
+            df['Perusahaan'] = df['Perusahaan'].replace(COMPANY_MAP)
+            
+            # 3. Normalize Jenis Alat (title case, merge variants)
+            JENIS_MAP = {
+                'Alat muat': 'Alat Muat',
+                'ALAT BANTU': 'Alat Bantu',
+                'ALAT MUAT': 'Alat Muat',
+                'ALAT ANGKUT': 'Alat Angkut',
+                'Sarana Operasional': 'Sarana Operasi',
+            }
+            df['Jenis_Alat'] = df['Jenis_Alat'].replace(JENIS_MAP)
+            
+            # 4. Filter rows where Tipe_Unit contains 'total' or 'shift'
+            mask = ~df['Tipe_Unit'].str.lower().str.contains(
+                'total|shift|flowmeter|flow meter', na=False)
+            df = df[mask]
+            
+            print(f"[Refueling Parser] Parsed {len(df)} records from PENGISIAN")
+            return df
+        
+        return pd.DataFrame()
+        
+    except Exception as e:
+        print(f"[Refueling Parser] Error: {e}")
+        return pd.DataFrame()
+
+
+def extract_day1_hm(source):
+    """
+    Extract HM values for Day 1 of a month from the PENGISIAN sheet.
+    Returns dict: { unit_name: hm_pagi_value }
+    Used for cross-month bridging: the Day 1 HM of month N+1 is needed
+    to calculate Jam_Operasi on the last day of month N.
+    """
+    try:
+        try:
+            xls = pd.ExcelFile(source, engine='openpyxl')
+        except:
+            if hasattr(source, 'seek'): source.seek(0)
+            xls = pd.ExcelFile(source)
+
+        if 'PENGISIAN' not in xls.sheet_names:
+            return {}
+
+        df_raw = pd.read_excel(xls, sheet_name='PENGISIAN', header=None)
+        if df_raw.empty or len(df_raw) < 8:
+            return {}
+
+        # Find day row
+        day_row_idx = 4
+        for i in range(min(10, len(df_raw))):
+            row_vals = df_raw.iloc[i].values[4:]
+            nums = []
+            for v in row_vals[:20]:
+                try:
+                    nums.append(int(float(v)))
+                except:
+                    pass
+            if len(nums) >= 2 and 1 in nums and 2 in nums:
+                day_row_idx = i
+                break
+
+        # Find day 1 column
+        day1_col = None
+        for col_idx in range(4, len(df_raw.columns)):
+            try:
+                if int(float(df_raw.iloc[day_row_idx, col_idx])) == 1:
+                    day1_col = col_idx
+                    break
+            except:
+                pass
+
+        if day1_col is None:
+            return {}
+
+        # Extract HM_Pagi (index +1) for each unit on Day 1
+        hm_map = {}
+        data_start = day_row_idx + 2  # typically row after sub-headers
+
+        SKIP_KW = {'total', 'shift', 'flowmeter', 'flow meter'}
+
+        for r in range(data_start, len(df_raw)):
+            unit = df_raw.iloc[r, 3]
+            if pd.isna(unit):
+                continue
+            unit_str = str(unit).strip()
+            if any(kw in unit_str.lower() for kw in SKIP_KW):
+                continue
+            if not unit_str:
+                continue
+
+            # Get HM_Pagi (sub-col index 1) for day 1
+            try:
+                hm_p = df_raw.iloc[r, day1_col + 1]
+                if pd.notna(hm_p):
+                    hm_val = float(hm_p)
+                    if hm_val > 0:
+                        hm_map[unit_str] = hm_val
+            except:
+                pass
+
+        return hm_map
+
+    except Exception as e:
+        print(f"[extract_day1_hm] Error: {e}")
+        return {}
+

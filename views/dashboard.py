@@ -470,3 +470,8 @@ def show_dashboard():
             )
         else:
             st.warning("Tidak ada data untuk ditampilkan pada rentang tanggal ini.")
+            
+    # --- GHOSTING FIX: Trailing Padding ---
+    # Append empty slots to overwrite any trailing DOM remnants from other longer modules
+    for _ in range(25):
+        st.empty()

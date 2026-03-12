@@ -68,6 +68,7 @@ def render_sidebar():
                 keys_to_clear = [
                     'df_prod', 'df_gangguan', 'df_shipping', 'df_stockpile', 
                     'df_ritase', 'df_daily_plan', 'df_target',
+                    'df_solar', 'df_fuel', 'df_refueling', 'df_solar_ref',
                     'last_sync_time', 'data_loaded', '_sync_time_checked'
                 ]
                 for key in keys_to_clear:
@@ -152,138 +153,14 @@ def render_sidebar():
         st.markdown("---")
         
         # ============================================================
-        # GLOBAL FILTERS (NEW)
+        # ROLE-BASED NAVIGATION & FILTERS
         # ============================================================
-        # ============================================================
-        # GLOBAL FILTERS (NEW)
-        # ============================================================
-        # st.markdown('<p class="nav-label">🔍 Global Filters</p>', unsafe_allow_html=True) # Replaced by Expander
-
-        # 1. Date Range
-        from datetime import date
-        today = date.today()
-        # Default start date: First Day of Current Month (User Request)
-        default_start = date(today.year, today.month, 1)
+        user_role = st.session_state.get('role', 'viewer')
         
-        # Initialize session state for filters if not exists
-        if 'global_filters' not in st.session_state:
-            st.session_state.global_filters = {
-                'date_range': (default_start, today),
-                'shift': 'All Displatch',
-                'front': [],
-                'excavator': [],
-                'material': []
-            }
-
-        with st.expander("🔍 Global Filters", expanded=True):
-            # Reset Button
-            if st.button("♻️ Reset Filter (Bulan Ini)", use_container_width=True, help="Kembalikan filter ke Bulan Ini"):
-                 st.session_state.global_filters = {
-                    'date_range': (default_start, today),
-                    'shift': 'All Displatch',
-                    'front': [],
-                    'excavator': [],
-                    'material': []
-                }
-                 st.rerun()
-
-            date_range = st.date_input(
-                "📅 Rentang Tanggal",
-                value=st.session_state.global_filters.get('date_range', (default_start, today)),
-                key="filter_date_range"
-            )
-            
-            
-            
-            # Load filter options from session_state (preloaded at login)
-            # Falls back to loader only if not preloaded
-            filter_options = st.session_state.get('filter_options', None)
-            if not filter_options:
-                from utils.data_loader import get_filter_options
-                filter_options = get_filter_options()
-                st.session_state['filter_options'] = filter_options
-    
-            # 2. Shift Filter (Dynamic from SQL)
-            shift_options = ["All Displatch"]
-            shift_options.extend(filter_options.get('shift', []))
-                
-            # Get current shift value safely
-            current_shift = st.session_state.global_filters.get('shift', 'All Displatch')
-            if current_shift not in shift_options:
-                current_shift = 'All Displatch'
-                
-            shift_select = st.selectbox(
-                "🕒 Shift Operasional",
-                shift_options,
-                index=shift_options.index(current_shift),
-                key="filter_shift"
-            )
-            
-            # 3. Dynamic Filters (Front & Excavator from SQL)
-            
-            # Front Filter
-            front_select = st.multiselect(
-                "📍 Lokasi Kerja (Front)",
-                options=filter_options.get('front', []),
-                default=st.session_state.global_filters.get('front', []),
-                placeholder="Pilih Front (Opsional)",
-                key="filter_front"
-            )
-            
-            # Excavator Filter
-            exca_select = st.multiselect(
-                "🚜 Unit Excavator",
-                options=filter_options.get('excavator', []),
-                default=st.session_state.global_filters.get('excavator', []),
-                placeholder="Pilih Unit (Opsional)",
-                key="filter_exca"
-            )
-            
-            # Material Filter
-            mat_select = st.multiselect(
-                "🪨 Jenis Material",
-                options=filter_options.get('material', []),
-                default=st.session_state.global_filters.get('material', []),
-                placeholder="Pilih Material (Opsional)",
-                key="filter_mat"
-            )
-            
-            # Store in session state
-            st.session_state.global_filters['date_range'] = date_range
-            st.session_state.global_filters['shift'] = shift_select
-            st.session_state.global_filters['front'] = front_select
-            st.session_state.global_filters['excavator'] = exca_select
-            st.session_state.global_filters['material'] = mat_select
-        
-        st.markdown("---")
-        
-        # Navigation
-        st.markdown('<p class="nav-label">📋 Navigation</p>', unsafe_allow_html=True)
-        
-        menus = [
-            ("🏠", "Ringkasan Eksekutif"),
-            ("⛏️", "Kinerja Produksi"),
-            ("🚛", "Aktivitas Ritase"),
-            ("⚙️", "Stockpile & Pengolahan"),
-            ("🚨", "Analisa Kendala"),
-            ("🚢", "Pengiriman & Logistik"),
-            ("📋", "Rencana Harian")
-        ]
-        
-        def set_menu(menu_name):
-            st.session_state.current_menu = menu_name
-            
-        for icon, menu in menus:
-            # Map old menu names if needed or handle routing in app.py
-            btn_type = "primary" if st.session_state.current_menu == menu else "secondary"
-            st.button(
-                f"{icon}  {menu}", 
-                key=f"nav_{menu}", 
-                use_container_width=True, 
-                type=btn_type,
-                on_click=set_menu,
-                args=(menu,)
-            )
+        if user_role == 'admin_solar':
+            _render_solar_sidebar()
+        else:
+            _render_production_sidebar()
         
         st.markdown("---")
         
@@ -301,3 +178,255 @@ def render_sidebar():
             </p>
         </div>
         """, unsafe_allow_html=True)
+
+
+def _render_solar_sidebar():
+    """Sidebar khusus admin_solar — Global Filters + 6 module navigation
+    Matches production sidebar layout: filters in expander above navigation.
+    """
+    import pandas as pd
+    from datetime import date
+    from utils.data_loader import load_solar_refueling
+    
+    today = date.today()
+    default_start = date(today.year, today.month, 1)
+    
+    # Initialize solar filters
+    if 'solar_filters' not in st.session_state:
+        st.session_state.solar_filters = {
+            'date_range': (default_start, today),
+            'perusahaan': [],
+            'jenis_alat': [],
+            'unit': []
+        }
+    
+    # Load data for filter options
+    df_solar = st.session_state.get('df_solar_ref', None)
+    if df_solar is None or (hasattr(df_solar, 'empty') and df_solar.empty):
+        df_solar = load_solar_refueling()
+        if df_solar is not None and not df_solar.empty:
+            st.session_state['df_solar_ref'] = df_solar
+    
+    # ---- GLOBAL FILTERS (in expander, like production) ----
+    with st.expander("🔍 Global Filters", expanded=True):
+        if df_solar is not None and not df_solar.empty:
+            # Reset Button
+            if st.button("♻️ Reset Filter (Semua)", use_container_width=True, help="Kembalikan filter ke default"):
+                st.session_state.solar_filters = {
+                    'date_range': (default_start, today),
+                    'perusahaan': [],
+                    'jenis_alat': [],
+                    'unit': []
+                }
+                st.rerun()
+            
+            # 1. Date range filter
+            date_range = st.date_input(
+                "📅 Rentang Tanggal",
+                value=st.session_state.solar_filters.get('date_range', (default_start, today)),
+                key="sf_date_range"
+            )
+            
+            # 2. Perusahaan filter
+            avail_co = sorted(df_solar['Perusahaan'].dropna().unique().tolist()) if 'Perusahaan' in df_solar.columns else []
+            
+            current_co = st.session_state.solar_filters.get('perusahaan', [])
+            valid_co = [c for c in current_co if c in avail_co]
+            
+            sel_co = st.multiselect(
+                "🏢 Perusahaan",
+                options=avail_co,
+                default=valid_co,
+                placeholder="Semua Perusahaan",
+                key="sf_perusahaan"
+            )
+            
+            # 3. Jenis Alat — cascading from Perusahaan
+            mask = pd.Series([True] * len(df_solar), index=df_solar.index)
+            if sel_co:
+                mask &= df_solar['Perusahaan'].isin(sel_co)
+            avail_jenis = sorted(df_solar[mask]['Jenis_Alat'].dropna().unique().tolist()) if 'Jenis_Alat' in df_solar.columns else []
+            
+            current_jenis = st.session_state.solar_filters.get('jenis_alat', [])
+            valid_jenis = [j for j in current_jenis if j in avail_jenis]
+            
+            sel_jenis = st.multiselect(
+                "🔧 Jenis Alat",
+                options=avail_jenis,
+                default=valid_jenis,
+                placeholder="Semua Jenis Alat",
+                key="sf_jenis"
+            )
+            
+            # 4. Tipe Unit — cascading from Perusahaan + Jenis Alat
+            mask2 = mask.copy()
+            if sel_jenis:
+                mask2 &= df_solar['Jenis_Alat'].isin(sel_jenis)
+            avail_unit = sorted(df_solar[mask2]['Tipe_Unit'].dropna().unique().tolist()) if 'Tipe_Unit' in df_solar.columns else []
+            
+            current_unit = st.session_state.solar_filters.get('unit', [])
+            valid_unit = [u for u in current_unit if u in avail_unit]
+            
+            sel_unit = st.multiselect(
+                "🚜 Tipe Unit",
+                options=avail_unit,
+                default=valid_unit,
+                placeholder="Semua Unit",
+                key="sf_unit"
+            )
+            
+            # Store filters
+            st.session_state.solar_filters = {
+                'date_range': date_range,
+                'perusahaan': sel_co,
+                'jenis_alat': sel_jenis,
+                'unit': sel_unit
+            }
+        else:
+            st.caption("_Belum ada data. Klik Sync & Refresh Data._")
+    
+    st.markdown("---")
+    
+    # ---- NAVIGATION (6 modules) ----
+    st.markdown('<p class="nav-label">📋 Navigation</p>', unsafe_allow_html=True)
+    
+    menus = [
+        ("🏠", "Ringkasan BBM"),
+        ("🛢️", "Pemakaian Solar"),
+        ("⚡", "Efisiensi BBM"),
+        ("🏢", "Analisis Perusahaan"),
+        ("📊", "Hour Meter & Operasi"),
+        ("📈", "Trend & Perbandingan"),
+    ]
+    
+    def set_menu(menu_name):
+        st.session_state.current_menu = menu_name
+    
+    for icon, menu in menus:
+        btn_type = "primary" if st.session_state.current_menu == menu else "secondary"
+        st.button(
+            f"{icon}  {menu}",
+            key=f"nav_{menu}",
+            use_container_width=True,
+            type=btn_type,
+            on_click=set_menu,
+            args=(menu,)
+        )
+
+
+def _render_production_sidebar():
+    """Sidebar produksi (existing) — unchanged for admin_produksi"""
+    
+    # ============================================================
+    # GLOBAL FILTERS (PRODUCTION)
+    # ============================================================
+    from datetime import date
+    today = date.today()
+    default_start = date(today.year, today.month, 1)
+    
+    if 'global_filters' not in st.session_state:
+        st.session_state.global_filters = {
+            'date_range': (default_start, today),
+            'shift': 'All Displatch',
+            'front': [],
+            'excavator': [],
+            'material': []
+        }
+
+    with st.expander("🔍 Global Filters", expanded=True):
+        if st.button("♻️ Reset Filter (Bulan Ini)", use_container_width=True, help="Kembalikan filter ke Bulan Ini"):
+            st.session_state.global_filters = {
+                'date_range': (default_start, today),
+                'shift': 'All Displatch',
+                'front': [],
+                'excavator': [],
+                'material': []
+            }
+            st.rerun()
+
+        date_range = st.date_input(
+            "📅 Rentang Tanggal",
+            value=st.session_state.global_filters.get('date_range', (default_start, today)),
+            key="filter_date_range"
+        )
+        
+        filter_options = st.session_state.get('filter_options', None)
+        if not filter_options:
+            from utils.data_loader import get_filter_options
+            filter_options = get_filter_options()
+            st.session_state['filter_options'] = filter_options
+
+        shift_options = ["All Displatch"]
+        shift_options.extend(filter_options.get('shift', []))
+            
+        current_shift = st.session_state.global_filters.get('shift', 'All Displatch')
+        if current_shift not in shift_options:
+            current_shift = 'All Displatch'
+            
+        shift_select = st.selectbox(
+            "🕒 Shift Operasional",
+            shift_options,
+            index=shift_options.index(current_shift),
+            key="filter_shift"
+        )
+        
+        front_select = st.multiselect(
+            "📍 Lokasi Kerja (Front)",
+            options=filter_options.get('front', []),
+            default=st.session_state.global_filters.get('front', []),
+            placeholder="Pilih Front (Opsional)",
+            key="filter_front"
+        )
+        
+        exca_select = st.multiselect(
+            "🚜 Unit Excavator",
+            options=filter_options.get('excavator', []),
+            default=st.session_state.global_filters.get('excavator', []),
+            placeholder="Pilih Unit (Opsional)",
+            key="filter_exca"
+        )
+        
+        mat_select = st.multiselect(
+            "🪨 Jenis Material",
+            options=filter_options.get('material', []),
+            default=st.session_state.global_filters.get('material', []),
+            placeholder="Pilih Material (Opsional)",
+            key="filter_mat"
+        )
+        
+        st.session_state.global_filters['date_range'] = date_range
+        st.session_state.global_filters['shift'] = shift_select
+        st.session_state.global_filters['front'] = front_select
+        st.session_state.global_filters['excavator'] = exca_select
+        st.session_state.global_filters['material'] = mat_select
+    
+    st.markdown("---")
+    
+    # Navigation
+    st.markdown('<p class="nav-label">📋 Navigation</p>', unsafe_allow_html=True)
+    
+    menus = [
+        ("🏠", "Ringkasan Eksekutif"),
+        ("⛏️", "Kinerja Produksi"),
+        ("🚛", "Aktivitas Ritase"),
+        ("⚙️", "Stockpile & Pengolahan"),
+        ("🚨", "Analisa Kendala"),
+        ("🚢", "Pengiriman & Logistik"),
+        ("📋", "Rencana Harian"),
+    ]
+    
+    def set_menu(menu_name):
+        st.session_state.current_menu = menu_name
+
+        
+    for icon, menu in menus:
+        btn_type = "primary" if st.session_state.current_menu == menu else "secondary"
+        st.button(
+            f"{icon}  {menu}", 
+            key=f"nav_{menu}", 
+            use_container_width=True, 
+            type=btn_type,
+            on_click=set_menu,
+            args=(menu,)
+        )
+
