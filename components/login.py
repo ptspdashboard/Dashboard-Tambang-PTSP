@@ -28,6 +28,16 @@ def logout():
 
 def show_login():
     """Render login page"""
+    
+    # Force hide sidebar completely on login page
+    st.markdown("""
+        <style>
+            [data-testid="stSidebar"] {
+                display: none !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+    
     logo_base64 = get_logo_base64()
     
     col1, col2, col3 = st.columns([1, 1.2, 1])
