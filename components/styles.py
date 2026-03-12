@@ -42,9 +42,19 @@ def inject_css():
     visibility: hidden !important;
     display: none !important;
 }
-/* Re-enable header for mobile hamburger menu, but make it transparent */
+/* Re-enable header for mobile hamburger menu, but make it a floating pill */
 header[data-testid="stHeader"] {
     background-color: transparent !important;
+}
+header[data-testid="stHeader"] .stAppToolbar {
+    background-color: rgba(10, 22, 40, 0.8) !important;
+    backdrop-filter: blur(10px) !important;
+    border-radius: 20px !important;
+    margin: 10px !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+header[data-testid="stHeader"] button {
+    color: var(--accent-gold) !important;
 }
 .block-container {padding: 1rem 2rem 2rem 2rem !important; max-width: 100% !important;}
 
