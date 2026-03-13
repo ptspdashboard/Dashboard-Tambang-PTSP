@@ -44,8 +44,8 @@ ONEDRIVE_LINKS = {
 # Each month has a separate Excel file with its own OneDrive link.
 # Key format: "YYYY-MM" -> OneDrive share link
 SOLAR_LINKS = {
-    "2026-01": "https://1drv.ms/x/c/0d7693320a930492/IQAFsKHlxOCnSoQ900ZR9QKTARuq6TbiTyN5cMCpSmeoH8I?e=S69aOT",
-    "2026-02": "https://1drv.ms/x/c/0d7693320a930492/IQAfBheo9uHnTKH7XeimoYo-AehQ1o9qLDUr6NFAug7u6eI?e=oxj0eq",
+    "2026-01": "https://1drv.ms/x/c/0d7693320a930492/IQAfBheo9uHnTKH7XeimoYo-AehQ1o9qLDUr6NFAug7u6eI?e=oxj0eq",
+    "2026-02": "https://1drv.ms/x/c/0d7693320a930492/IQAFsKHlxOCnSoQ900ZR9QKTARuq6TbiTyN5cMCpSmeoH8I?e=S69aOT",
     "2026-03": "https://1drv.ms/x/c/0d7693320a930492/IQA9HFXB7lXuSZK7cFy01CZ1AR-UWoL3_jccMITm_x7h-Bs?e=7RJCPm",
 }
 

@@ -56,10 +56,17 @@ def show_solar_efisiensi():
         # Mengelompokkan berdasarkan Tipe_Unit, Perusahaan, dan Jenis_Alat agar informasi tidak hilang
         unit_rank = df_ljam.groupby(['Tipe_Unit', 'Perusahaan', 'Jenis_Alat'])['L_per_Jam'].mean().reset_index()
         unit_rank.columns = ['Tipe_Unit', 'Perusahaan', 'Jenis_Alat', 'Avg_Val']
-        unit_rank = unit_rank.nlargest(15, 'Avg_Val').sort_values('Avg_Val', ascending=True)
+        unit_rank = unit_rank.sort_values('Avg_Val', ascending=True)
         
+        # Extract the unique number at the end of Tipe_Unit (e.g., '804' from 'PC 850 (Excavator) : 804')
+        def _get_unique_id(name):
+            name = str(name)
+            if ':' in name: return name.split(':')[-1].strip()
+            return name[-5:].strip() if len(name) > 15 else ""
+
         # Membuat label gabungan untuk ditampilkan di sumbu Y chart
-        unit_rank['Label'] = unit_rank['Tipe_Unit'].str[:18] + ' (' + unit_rank['Perusahaan'].str[:8] + ' | ' + unit_rank['Jenis_Alat'].str[:8] + ')'
+        unit_rank['Unique_ID'] = unit_rank['Tipe_Unit'].apply(_get_unique_id)
+        unit_rank['Label'] = unit_rank['Tipe_Unit'].str[:15] + '..' + unit_rank['Unique_ID'] + ' (' + unit_rank['Perusahaan'].str[:8] + ') ' + unit_rank.index.astype(str)
 
         fig = go.Figure()
         bar_colors = ['#22c55e' if v <= avg_lph else '#ef4444' for v in unit_rank['Avg_Val']]
@@ -68,7 +75,7 @@ def show_solar_efisiensi():
                             text=unit_rank['Avg_Val'].round(1), textposition='inside',
                             textfont=dict(color='white', size=11)))
         fig.add_vline(x=avg_lph, line_dash="dash", line_color="#FFB627", annotation_text=f"Avg: {avg_lph:.1f}")
-        fig.update_layout(template='plotly_dark', height=500,
+        fig.update_layout(template='plotly_dark', height=max(500, len(unit_rank) * 30 + 100),
                          margin=dict(t=30, b=30, l=20, r=60), yaxis_title="", xaxis_title="L/Jam")
         st.plotly_chart(fig, use_container_width=True, key="efisiensi_chart_unitrank")
 
@@ -143,8 +150,15 @@ def show_solar_efisiensi():
         lkm_rank.columns = ['Tipe_Unit', 'Perusahaan', 'Jenis_Alat', 'Avg_Val']
         lkm_rank = lkm_rank.sort_values('Avg_Val', ascending=True)
         
+        # Extract the unique number at the end of Tipe_Unit
+        def _get_unique_id(name):
+            name = str(name)
+            if ':' in name: return name.split(':')[-1].strip()
+            return name[-5:].strip() if len(name) > 15 else ""
+
         # Membuat label gabungan untuk ditampilkan di sumbu Y chart
-        lkm_rank['Label'] = lkm_rank['Tipe_Unit'].str[:18] + ' (' + lkm_rank['Perusahaan'].str[:8] + ' | ' + lkm_rank['Jenis_Alat'].str[:8] + ')'
+        lkm_rank['Unique_ID'] = lkm_rank['Tipe_Unit'].apply(_get_unique_id)
+        lkm_rank['Label'] = lkm_rank['Tipe_Unit'].str[:15] + '..' + lkm_rank['Unique_ID'] + ' (' + lkm_rank['Perusahaan'].str[:8] + ') ' + lkm_rank.index.astype(str)
 
         fig5 = go.Figure()
         bar_colors5 = ['#22c55e' if v <= avg_lpk else '#ef4444' for v in lkm_rank['Avg_Val']]

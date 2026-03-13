@@ -13,7 +13,21 @@ from views.solar_common import (
 
 
 def show_solar_trend():
-    df_full, df = load_and_filter()
+    df_full, _ = load_and_filter()
+    
+    # We want to ignore the global DATE filter so we can see all months,
+    # but we DO want to respect the other global filters (Perusahaan, Jenis, Unit)
+    filters = st.session_state.get('solar_filters', {})
+    sel_co = filters.get('perusahaan', [])
+    sel_jenis = filters.get('jenis_alat', [])
+    sel_units = filters.get('unit', [])
+    
+    mask = pd.Series([True] * len(df_full), index=df_full.index)
+    if sel_co: mask &= df_full['Perusahaan'].isin(sel_co)
+    if sel_jenis: mask &= df_full['Jenis_Alat'].isin(sel_jenis)
+    if sel_units: mask &= df_full['Tipe_Unit'].isin(sel_units)
+    
+    df = df_full[mask].copy()
     header("Trend & Perbandingan", "Analisis Month-over-Month dan Perbandingan Lintas Dimensi", "📈")
 
     if df.empty:
