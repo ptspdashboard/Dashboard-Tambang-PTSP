@@ -53,12 +53,17 @@ def show_solar_efisiensi():
         with c4: kpi_card("Total Jam Operasi", fmt(total_jam, " Jam"), icon="⏱️")
         spacer()
 
-        unit_rank = unit_avg_ljam.reset_index()
-        unit_rank.columns = ['Tipe_Unit', 'Avg_Val']
+        # Mengelompokkan berdasarkan Tipe_Unit, Perusahaan, dan Jenis_Alat agar informasi tidak hilang
+        unit_rank = df_ljam.groupby(['Tipe_Unit', 'Perusahaan', 'Jenis_Alat'])['L_per_Jam'].mean().reset_index()
+        unit_rank.columns = ['Tipe_Unit', 'Perusahaan', 'Jenis_Alat', 'Avg_Val']
         unit_rank = unit_rank.nlargest(15, 'Avg_Val').sort_values('Avg_Val', ascending=True)
+        
+        # Membuat label gabungan untuk ditampilkan di sumbu Y chart
+        unit_rank['Label'] = unit_rank['Tipe_Unit'].str[:18] + ' (' + unit_rank['Perusahaan'].str[:8] + ' | ' + unit_rank['Jenis_Alat'].str[:8] + ')'
+
         fig = go.Figure()
         bar_colors = ['#22c55e' if v <= avg_lph else '#ef4444' for v in unit_rank['Avg_Val']]
-        fig.add_trace(go.Bar(x=unit_rank['Avg_Val'], y=unit_rank['Tipe_Unit'].str[:30],
+        fig.add_trace(go.Bar(x=unit_rank['Avg_Val'], y=unit_rank['Label'],
                             orientation='h', marker_color=bar_colors,
                             text=unit_rank['Avg_Val'].round(1), textposition='inside',
                             textfont=dict(color='white', size=11)))
@@ -133,12 +138,17 @@ def show_solar_efisiensi():
         with c4: kpi_card("Total Kilometer", fmt(total_km, " Km"), icon="📏")
         spacer()
 
-        lkm_rank = unit_avg_lkm.reset_index()
-        lkm_rank.columns = ['Tipe_Unit', 'Avg_Val']
+        # Mengelompokkan berdasarkan Tipe_Unit, Perusahaan, dan Jenis_Alat agar informasi tidak hilang
+        lkm_rank = df_lkm.groupby(['Tipe_Unit', 'Perusahaan', 'Jenis_Alat'])['L_per_Jam'].mean().reset_index()
+        lkm_rank.columns = ['Tipe_Unit', 'Perusahaan', 'Jenis_Alat', 'Avg_Val']
         lkm_rank = lkm_rank.sort_values('Avg_Val', ascending=True)
+        
+        # Membuat label gabungan untuk ditampilkan di sumbu Y chart
+        lkm_rank['Label'] = lkm_rank['Tipe_Unit'].str[:18] + ' (' + lkm_rank['Perusahaan'].str[:8] + ' | ' + lkm_rank['Jenis_Alat'].str[:8] + ')'
+
         fig5 = go.Figure()
         bar_colors5 = ['#22c55e' if v <= avg_lpk else '#ef4444' for v in lkm_rank['Avg_Val']]
-        fig5.add_trace(go.Bar(x=lkm_rank['Avg_Val'], y=lkm_rank['Tipe_Unit'].str[:30],
+        fig5.add_trace(go.Bar(x=lkm_rank['Avg_Val'], y=lkm_rank['Label'],
                             orientation='h', marker_color=bar_colors5,
                             text=lkm_rank['Avg_Val'].round(2), textposition='inside',
                             textfont=dict(color='white', size=11)))

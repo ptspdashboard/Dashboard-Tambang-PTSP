@@ -44,20 +44,7 @@ def show_solar_ringkasan():
     avg_lkm = df_lkm_r['L_per_Jam'].mean() if not df_lkm_r.empty else 0
 
     # MoM calculation (avg daily based)
-    mom_label = "N/A"
-    mom_val = None
-    if 'Bulan' in df_full.columns and df_full['Bulan'].nunique() >= 2:
-        bulan_sorted = sorted(df_full['Bulan'].dropna().unique(),
-                             key=lambda x: BULAN_ORDER.get(x, 99))
-        cur_m_data = df_full[(df_full['Bulan'] == bulan_sorted[-1]) & (df_full['Liter'] > 0)]
-        prev_m_data = df_full[(df_full['Bulan'] == bulan_sorted[-2]) & (df_full['Liter'] > 0)]
-        cur_m_days = cur_m_data['Tanggal'].nunique()
-        prev_m_days = prev_m_data['Tanggal'].nunique()
-        cur_m_avg = cur_m_data['Liter'].sum() / cur_m_days if cur_m_days > 0 else 0
-        prev_m_avg = prev_m_data['Liter'].sum() / prev_m_days if prev_m_days > 0 else 0
-        if prev_m_avg > 0:
-            mom_val = ((cur_m_avg - prev_m_avg) / prev_m_avg) * 100
-            mom_label = f"{'↑ Naik' if mom_val > 0 else '↓ Turun'} {abs(mom_val):.1f}%"
+    # Dihapus karena membingungkan saat memfilter tanggal tertetu
 
     # ─── HERO KPI ROW ─────────────────────────────────────────
     hero_col, side_col = st.columns([3, 2])
@@ -78,23 +65,12 @@ def show_solar_ringkasan():
         """, unsafe_allow_html=True)
 
     with side_col:
-        mom_color = '#22c55e' if mom_val is not None and mom_val < 0 else '#ef4444' if mom_val is not None else '#94a3b8'
-        mom_bg = f"rgba({34},{197},{94},0.15)" if mom_val is not None and mom_val < 0 else f"rgba({239},{68},{68},0.15)"
-        mom_border = f"rgba({34},{197},{94},0.3)" if mom_val is not None and mom_val < 0 else f"rgba({239},{68},{68},0.3)"
         st.markdown(f"""
-        <div style="display:flex; gap:8px; flex-direction:column;">
-            <div style="background: rgba(6,214,160,0.15); border: 1px solid rgba(6,214,160,0.3);
-                        border-radius: 12px; padding: 16px 20px;">
-                <div style="color: #06D6A0; font-size: 11px; font-weight: 600; text-transform: uppercase;">
-                    📊 Rata-rata Harian</div>
-                <div style="color: white; font-size: 26px; font-weight: 700;">{avg_daily:,.0f} L/Hari</div>
-            </div>
-            <div style="background: {mom_bg}; border: 1px solid {mom_border};
-                        border-radius: 12px; padding: 16px 20px;">
-                <div style="color: {mom_color}; font-size: 11px; font-weight: 600; text-transform: uppercase;">
-                    📈 vs Bulan Lalu (Avg Harian)</div>
-                <div style="color: {mom_color}; font-size: 26px; font-weight: 700;">{mom_label}</div>
-            </div>
+        <div style="background: rgba(6,214,160,0.15); border: 1px solid rgba(6,214,160,0.3);
+                    border-radius: 16px; padding: 28px 32px; display: flex; flex-direction: column; justify-content: center; height: 162px; margin-bottom: 12px;">
+            <div style="color: #06D6A0; font-size: 13px; font-weight: 600; text-transform: uppercase;">
+                📊 Rata-rata Harian</div>
+            <div style="color: white; font-size: 36px; font-weight: 800; margin-top: 8px;">{avg_daily:,.0f} L/Hari</div>
         </div>
         """, unsafe_allow_html=True)
 
