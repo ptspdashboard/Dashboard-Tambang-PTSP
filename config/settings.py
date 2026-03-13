@@ -44,9 +44,9 @@ ONEDRIVE_LINKS = {
 # Each month has a separate Excel file with its own OneDrive link.
 # Key format: "YYYY-MM" -> OneDrive share link
 SOLAR_LINKS = {
-    "2026-01": "https://1drv.ms/x/c/07c1e1a8c3295b87/IQB4j_r8JO_TR7FfD8yUPbGsAUpPDz8sABE5ay5_sn6c7WI",
-    "2026-02": "https://1drv.ms/x/c/07c1e1a8c3295b87/IQCVnRNVVSPZSal6jKtjYDOWATylbmYzq9Y8pNbtv5F2-e4",
-    "2026-03": "https://1drv.ms/x/c/07c1e1a8c3295b87/IQChrI3CKPLnTq8lnp1GA21kAZbKRu9sUeJrq-4QgeJ6hEU",
+    "2026-01": "https://1drv.ms/x/c/0d7693320a930492/IQAFsKHlxOCnSoQ900ZR9QKTARuq6TbiTyN5cMCpSmeoH8I?e=S69aOT",
+    "2026-02": "https://1drv.ms/x/c/0d7693320a930492/IQAfBheo9uHnTKH7XeimoYo-AehQ1o9qLDUr6NFAug7u6eI?e=oxj0eq",
+    "2026-03": "https://1drv.ms/x/c/0d7693320a930492/IQA9HFXB7lXuSZK7cFy01CZ1AR-UWoL3_jccMITm_x7h-Bs?e=7RJCPm",
 }
 
 # Month key to sheet name mapping
